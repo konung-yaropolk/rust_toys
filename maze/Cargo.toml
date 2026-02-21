@@ -1,0 +1,12 @@
+[package]
+name = "maze"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+glium = "0.34"
+glutin = "0.31"
+winit = "0.29"               # required by recent glutin
+glyph_brush = "0.7"
+bitflags = "2.0"
+rand = "0.8"
