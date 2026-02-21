@@ -1,7 +1,7 @@
 use macroquad::prelude::*;
 
-const WIDTH: usize = 1980;
-const HEIGHT: usize = 1024;
+const WIDTH: usize = 1280;   //  1280; 1980;
+const HEIGHT: usize = 720;  //   720; 1024;
 const MAX_ITER: u32 = 400;
 
 struct View {
