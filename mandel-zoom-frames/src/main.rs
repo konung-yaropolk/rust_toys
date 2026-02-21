@@ -7,18 +7,19 @@ use image::GenericImageView; // not needed here, just for completeness
 // ────────────────────────────────────────────────
 //  CONFIG — change these values
 // ────────────────────────────────────────────────
-const WIDTH: u32 = 1920;
-const HEIGHT: u32 = 1080;
+const WIDTH: u32 = 2560;
+const HEIGHT: u32 = 1440;
 
-const START_CENTER_RE: f64 = -0.745429;
-const START_CENTER_IM: f64 = 0.11301;
+const START_CENTER_RE: f64 = -0.743643887037158704752191506114774;
+const START_CENTER_IM: f64 = 0.131825904205311970493132056385139;
 const START_ZOOM: f64      = 1.0;
 
-const FRAME_COUNT: usize   = 400;
-const ZOOM_PER_FRAME: f64  = 1.065;
+const FRAME_COUNT: usize   = 4000;
+const ZOOM_PER_FRAME: f64  = 1.01;
 
 const BASE_MAX_ITER: u32   = 200;
 const ITER_SCALE_FACTOR: f64 = 50.0;
+
 
 #[derive(Clone, Copy, Debug)]
 enum ColorMap {
