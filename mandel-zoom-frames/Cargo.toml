@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-image = "0.25"
+image = { version = "0.25", features = ["rayon"] }
 rayon = "1.10"
 clap = { version = "4.5", features = ["derive"] }
 num_cpus = "1.16"
