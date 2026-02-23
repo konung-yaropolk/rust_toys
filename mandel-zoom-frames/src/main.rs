@@ -6,24 +6,25 @@ use std::fs;
 
 
 // ────────────────────────────────────────────────
-//  CONFIG — change these values
+//  DEFAULT CONFIG 
 // ────────────────────────────────────────────────
 
-// const OUTPUT_DIR: &str = "frames";
+const WIDTH:  u32          = 640;     //  3840; 2560; 1920; 800; 640;
+const HEIGHT: u32          = 480;     //  2160; 1440; 1080; 600; 480;
 
-const WIDTH: u32 = 640;  //  3840; 2560; 1920; 800; 640;
-const HEIGHT: u32 = 480; //  2160; 1440; 1080; 600; 480;
+const START_CENTER_RE: f64 = -0.743643887037158704752191506114774;     // Starting real part of center
+const START_CENTER_IM: f64 =  0.131825904205311970493132056385139;     // Starting imaginary part of center
+const START_ZOOM: f64      = 1.0;     // Initial zoom level (1.0 = full view)
 
-const START_CENTER_RE: f64 = -0.743643887037158704752191506114774;
-const START_CENTER_IM: f64 = 0.131825904205311970493132056385139;
-const START_ZOOM: f64      = 1.0;
-
-const FRAME_COUNT: usize   = 3160;
-const ZOOM_PER_FRAME: f64  = 1.07;
+const FRAME_COUNT: usize   = 3160;    // Number of frames to generate
+const ZOOM_PER_FRAME: f64  = 1.07;    // Zoom multiplier per frame (e.g., 1.065 for smooth)
 
 const BASE_MAX_ITER: u32   = 200;
 const ITER_SCALE_FACTOR: f64 = 50.0;
 
+const THREADS: usize = 0;     // Number of threads to use (0 = auto-detect)
+
+// const OUTPUT_DIR: &str = "frames";
 
 #[derive(Parser, Debug)]
 #[command(
@@ -41,11 +42,11 @@ struct Args {
     // output_dir: &str,
 
     /// Width of each frame (pixels)
-    #[arg(long, default_value_t = WIDTH)]  // 4K default
+    #[arg(long, default_value_t = WIDTH)]  // set const as default
     width: u32,
 
     /// Height of each frame (pixels)
-    #[arg(long, default_value_t = HEIGHT)]  // 4K default
+    #[arg(long, default_value_t = HEIGHT)]  // set const as default
     height: u32,
 
     /// Starting real part of center (e.g., -0.745429)
@@ -81,7 +82,7 @@ struct Args {
     colormap: ColorMap,
 
     /// Number of threads to use (0 = auto-detect)
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, default_value_t = THREADS)]
     threads: usize,
 }
 
