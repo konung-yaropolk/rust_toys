@@ -19,8 +19,8 @@ const START_ZOOM: f64      = 1.0;     // Initial zoom level (1.0 = full view)
 const FRAME_COUNT: usize   = 3160;    // Number of frames to generate
 const ZOOM_PER_FRAME: f64  = 1.07;    // Zoom multiplier per frame (e.g., 1.065 for smooth)
 
-const BASE_MAX_ITER: u32   = 200;
-const ITER_SCALE_FACTOR: f64 = 50.0;
+const BASE_MAX_ITER: u32   = 200;     // 200 is good optimization for limitations of f64 range
+const ITER_SCALE_FACTOR: f64 = 200.0; // 200 is good optimization for limitations of f64 range
 
 const THREADS: usize = 0;     // Number of threads to use (0 = auto-detect)
 
