@@ -10,7 +10,7 @@ clap = { version = "4.5", features = ["derive"] }
 num_cpus = "1.16"
 
 [profile.release]
-opt-level = '3'
+opt-level = 3
 lto = true         # Enable Link-Time Optimization
 codegen-units = 1  # Helps LTO optimize more effectively
 strip = true       # Automatically strip symbols from the binary.
