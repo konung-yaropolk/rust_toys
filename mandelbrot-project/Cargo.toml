@@ -1,0 +1,12 @@
+[workspace]
+members = [
+    "mandelbrot-lib",
+    "mandelbrot-framegen",
+]
+
+[profile.release]
+opt-level = 3
+lto = true         # Enable Link-Time Optimization
+codegen-units = 1  # Helps LTO optimize more effectively
+strip = true       # Automatically strip symbols from the binary.
+panic = 'abort'    # or 'unwind' for safe memory cleanup

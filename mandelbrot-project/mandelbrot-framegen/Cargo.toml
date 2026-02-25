@@ -1,0 +1,11 @@
+[package]
+name = "mandelbrot-framegen"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5.1", features = ["derive"] }
+image = "0.25.0"  # For RgbImage and saving PNG
+mandelbrot-lib = { path = "../mandelbrot-lib" }
+rayon = "1.10.0"  # For global thread pool
+num_cpus = "1.16.0"  # For auto-detect

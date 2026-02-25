@@ -1,0 +1,9 @@
+[package]
+name = "mandelbrot-lib"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rayon = "1.10.0"  # For parallelism
+num_cpus = "1.16.0"  # For auto-detecting threads
+

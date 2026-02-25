@@ -158,6 +158,125 @@ fn main() {
 }
 
 
+
+
+// Unoptimized version that just works
+
+// fn generate_mandelbrot_frame(
+//     center_re: f64,
+//     center_im: f64,
+//     zoom: f64,
+//     max_iter: u32,
+//     colormap: ColorMap,
+//     width: u32,
+//     height: u32,
+// ) -> RgbImage {
+//     let mut img: RgbImage = ImageBuffer::new(width, height);
+
+//     let aspect = width as f64 / height as f64;
+//     let scale = 3.5 / zoom;
+
+//     let min_re = center_re - scale * aspect * 0.5;
+//     let min_im = center_im - scale * 0.5;
+//     let step_re = scale * aspect / (width as f64 - 1.0);
+//     let step_im = scale / (height as f64 - 1.0);
+
+//     // Split image rows into chunks (rayon-friendly mutable slices)
+//     let h = height as usize;
+//     let rows_per_chunk = (h / rayon::current_num_threads().max(1)).max(1);
+
+//     img.rows_mut()
+//         .collect::<Vec<_>>()
+//         .par_chunks_mut(rows_per_chunk)
+//         .enumerate()
+//         .for_each(|(chunk_idx, chunk_rows)| {
+//             let start_y = chunk_idx * rows_per_chunk;
+
+//             for (local_y, row) in chunk_rows.iter_mut().enumerate() {
+//                 let y = (start_y + local_y) as u32;
+//                 let c_im = min_im + y as f64 * step_im;
+
+//                 for (x, pixel) in row.enumerate() {
+//                     let c_re = min_re + x as f64 * step_re;
+//                     let iter = mandelbrot_iter(c_re, c_im, max_iter);
+//                     *pixel = color_from_iter(iter, max_iter, colormap);
+//                 }
+//             }
+//         });
+
+//     img
+// }
+
+
+
+// Optimized render
+
+fn generate_mandelbrot_frame(
+    center_re: f64,
+    center_im: f64,
+    zoom: f64,
+    max_iter: u32,
+    colormap: ColorMap,
+    width: u32,
+    height: u32,
+) -> RgbImage {
+    let mut img: RgbImage = ImageBuffer::new(width, height);
+
+    let aspect = width as f64 / height as f64;
+    let scale = 3.5 / zoom;
+
+    let min_re = center_re - scale * aspect * 0.5;
+    let min_im = center_im - scale * 0.5;
+    let step_re = scale * aspect / (width as f64 - 1.0);
+    let step_im = scale / (height as f64 - 1.0);
+
+    // Symmetry optimization
+    if center_im.abs() < 1e-10 {
+        // Compute only upper half (y from 0 to mid inclusive)
+        let h = height as usize;
+        let mid = h / 2;  // last upper row index
+
+        // Parallel compute upper half (including middle row if height odd)
+        img.par_enumerate_pixels_mut()
+            .filter(|(_, y, _)| (*y as usize) <= mid)
+            .for_each(|(x, y, pixel)| {
+                let c_re = min_re + x as f64 * step_re;
+                let c_im = min_im + y as f64 * step_im;
+                let iter = mandelbrot_iter(c_re, c_im, max_iter);
+                *pixel = color_from_iter(iter, max_iter, colormap);
+            });
+
+        // Mirror lower half by copying rows (raw buffer access)
+        let bytes_per_row = width as usize * 3;
+        let data: &mut [u8] = img.as_mut();
+
+        for y in (mid + 1)..h {
+            let src_y = h - 1 - y;
+            let dst_start = y * bytes_per_row;
+            let src_start = src_y * bytes_per_row;
+
+            // Split the mutable borrow into two non-overlapping mutable slices
+            let (left, right) = data.split_at_mut(dst_start);
+            let dst_slice = &mut right[0..bytes_per_row];
+
+            let src_slice = &left[src_start..src_start + bytes_per_row];  // immutable borrow from left part
+
+            dst_slice.copy_from_slice(src_slice);
+        }
+    } else {
+        // No symmetry — full parallel fill
+        img.par_enumerate_pixels_mut()
+            .for_each(|(x, y, pixel)| {
+                let c_re = min_re + x as f64 * step_re;
+                let c_im = min_im + y as f64 * step_im;
+                let iter = mandelbrot_iter(c_re, c_im, max_iter);
+                *pixel = color_from_iter(iter, max_iter, colormap);
+            });
+    }
+
+    img
+}
+
 fn color_from_iter(iter: u32, max_iter: u32, colormap: ColorMap) -> Rgb<u8> {
     if iter == max_iter {
         return Rgb([0, 0, 0]);
@@ -285,125 +404,6 @@ fn color_from_iter(iter: u32, max_iter: u32, colormap: ColorMap) -> Rgb<u8> {
             ])
         }
     }
-}
-
-// Unoptimized version that just works
-
-// fn generate_mandelbrot_frame(
-//     center_re: f64,
-//     center_im: f64,
-//     zoom: f64,
-//     max_iter: u32,
-//     colormap: ColorMap,
-//     width: u32,
-//     height: u32,
-// ) -> RgbImage {
-//     let mut img: RgbImage = ImageBuffer::new(width, height);
-
-//     let aspect = width as f64 / height as f64;
-//     let scale = 3.5 / zoom;
-
-//     let min_re = center_re - scale * aspect * 0.5;
-//     let min_im = center_im - scale * 0.5;
-//     let step_re = scale * aspect / (width as f64 - 1.0);
-//     let step_im = scale / (height as f64 - 1.0);
-
-//     // Split image rows into chunks (rayon-friendly mutable slices)
-//     let h = height as usize;
-//     let rows_per_chunk = (h / rayon::current_num_threads().max(1)).max(1);
-
-//     img.rows_mut()
-//         .collect::<Vec<_>>()
-//         .par_chunks_mut(rows_per_chunk)
-//         .enumerate()
-//         .for_each(|(chunk_idx, chunk_rows)| {
-//             let start_y = chunk_idx * rows_per_chunk;
-
-//             for (local_y, row) in chunk_rows.iter_mut().enumerate() {
-//                 let y = (start_y + local_y) as u32;
-//                 let c_im = min_im + y as f64 * step_im;
-
-//                 for (x, pixel) in row.enumerate() {
-//                     let c_re = min_re + x as f64 * step_re;
-//                     let iter = mandelbrot_iter(c_re, c_im, max_iter);
-//                     *pixel = color_from_iter(iter, max_iter, colormap);
-//                 }
-//             }
-//         });
-
-//     img
-// }
-
-
-
-// Optimized render
-
-fn generate_mandelbrot_frame(
-    center_re: f64,
-    center_im: f64,
-    zoom: f64,
-    max_iter: u32,
-    colormap: ColorMap,
-    width: u32,
-    height: u32,
-) -> RgbImage {
-    let mut img: RgbImage = ImageBuffer::new(width, height);
-
-    let aspect = width as f64 / height as f64;
-    let scale = 3.5 / zoom;
-
-    let min_re = center_re - scale * aspect * 0.5;
-    let min_im = center_im - scale * 0.5;
-    let step_re = scale * aspect / (width as f64 - 1.0);
-    let step_im = scale / (height as f64 - 1.0);
-
-    // Symmetry optimization
-    if center_im.abs() < 1e-10 {
-        // Compute only upper half (y from 0 to mid inclusive)
-        let h = height as usize;
-        let mid = h / 2;  // last upper row index
-
-        // Parallel compute upper half (including middle row if height odd)
-        img.par_enumerate_pixels_mut()
-            .filter(|(_, y, _)| (*y as usize) <= mid)
-            .for_each(|(x, y, pixel)| {
-                let c_re = min_re + x as f64 * step_re;
-                let c_im = min_im + y as f64 * step_im;
-                let iter = mandelbrot_iter(c_re, c_im, max_iter);
-                *pixel = color_from_iter(iter, max_iter, colormap);
-            });
-
-        // Mirror lower half by copying rows (raw buffer access)
-        let bytes_per_row = width as usize * 3;
-        let data: &mut [u8] = img.as_mut();
-
-        // ...
-
-        for y in (mid + 1)..h {
-            let src_y = h - 1 - y;
-            let dst_start = y * bytes_per_row;
-            let src_start = src_y * bytes_per_row;
-
-            // Split the mutable borrow into two non-overlapping mutable slices
-            let (left, right) = data.split_at_mut(dst_start);
-            let dst_slice = &mut right[0..bytes_per_row];
-
-            let src_slice = &left[src_start..src_start + bytes_per_row];  // immutable borrow from left part
-
-            dst_slice.copy_from_slice(src_slice);
-        }
-    } else {
-        // No symmetry — full parallel fill
-        img.par_enumerate_pixels_mut()
-            .for_each(|(x, y, pixel)| {
-                let c_re = min_re + x as f64 * step_re;
-                let c_im = min_im + y as f64 * step_im;
-                let iter = mandelbrot_iter(c_re, c_im, max_iter);
-                *pixel = color_from_iter(iter, max_iter, colormap);
-            });
-    }
-
-    img
 }
 
 fn mandelbrot_iter(cr: f64, ci: f64, max_iter: u32) -> u32 {
