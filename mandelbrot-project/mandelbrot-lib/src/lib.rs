@@ -230,8 +230,8 @@ fn color_from_iter(iter: u32, max_iter: u32, colormap_name: &str) -> [u8; 3] {
                 b.clamp(0.0, 255.0) as u8,
             ]
         }
-        "_" => {
-         panic!("Unexpected invalid token");
+        &_ => {
+        panic!("Unexpected invalid token ")
         }
     }
 }
