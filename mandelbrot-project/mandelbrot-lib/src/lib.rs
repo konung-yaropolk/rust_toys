@@ -1,8 +1,5 @@
 // mandelbrot-lib/src/lib.rs
 use rayon::prelude::*;
-use std::str::FromStr;
-
-// #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 
 pub fn generate_mandelbrot_frame(
     center_re: f64,
@@ -35,8 +32,14 @@ pub fn generate_mandelbrot_frame(
     let step_re = scale * aspect / (width as f64 - 1.0);
     let step_im = scale / (height as f64 - 1.0);
 
-    // Tune chunk size: aim for 4-8 chunks per thread
-    let rows_per_chunk = (height_usize / (num_threads * 6)).max(1);
+    // ────────────────────────────────
+    // Tune this value!
+    // Aim for ~ 4–16 tasks per core → e.g. 32–256 chunks total
+    // For 1080p (~2000 rows) → chunk of ~8–32 rows
+    // For 4K → larger chunks ok
+    // Start with: height / (num_threads * 4)
+    // ────────────────────────────────
+    let rows_per_chunk = (height_usize / (num_threads * 16)).max(1);
     let chunk_size_bytes = rows_per_chunk * bytes_per_row;
 
     if center_im.abs() < 1e-10 {
@@ -231,7 +234,7 @@ fn color_from_iter(iter: u32, max_iter: u32, colormap_name: &str) -> [u8; 3] {
             ]
         }
         &_ => {
-        panic!("Unexpected invalid token ")
+            panic!("Unexpected invalid colormap name")
         }
     }
 }

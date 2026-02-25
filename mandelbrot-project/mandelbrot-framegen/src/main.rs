@@ -1,10 +1,9 @@
 // mandel-zoom-frames/src/main.rs
-use clap::{builder::PossibleValue, Parser};
+use clap::{Parser};
 use image::{ImageBuffer, RgbImage};
 use mandelbrot_lib::{generate_mandelbrot_frame};
 use rayon::ThreadPoolBuilder;
 use std::fs;
-use std::str::FromStr;
 
 // ────────────────────────────────────────────────
 //  DEFAULT CONFIG 
@@ -82,10 +81,7 @@ struct Args {
     #[arg(
         long,
         default_value = "hsvclassic",
-        value_parser = clap::builder::PossibleValuesParser::new([
-            "hsvclassic", "hsvcycle", "grayscale", "fire", "ocean",
-            "rainbow", "viridis", "magma", "plasma"
-        ])
+        help = "Colormap: hsvclassic, hsvcycle, grayscale, fire, ocean, rainbow, viridis, magma, plasma"
     )]
     colormap: String,
 
