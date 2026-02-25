@@ -1,5 +1,8 @@
 // mandelbrot-lib/src/lib.rs
+use image::{ImageBuffer, Rgb, RgbImage};
 use rayon::prelude::*;
+
+// Optimized render
 
 pub fn generate_mandelbrot_frame(
     center_re: f64,
@@ -9,20 +12,9 @@ pub fn generate_mandelbrot_frame(
     colormap: &str,
     width: u32,
     height: u32,
-    threads: usize,
-) -> Vec<u8> {
-    let num_threads = if threads == 0 {
-        num_cpus::get().max(1)
-    } else {
-        threads
-    };
-
-    let width_usize = width as usize;
-    let height_usize = height as usize;
-    let bytes_per_row = width_usize * 3;
-    let total_bytes = bytes_per_row * height_usize;
-
-    let mut data: Vec<u8> = vec![0; total_bytes];
+) -> RgbImage {
+    
+    let mut img: RgbImage = ImageBuffer::new(width, height);
 
     let aspect = width as f64 / height as f64;
     let scale = 3.5 / zoom;
@@ -32,84 +24,56 @@ pub fn generate_mandelbrot_frame(
     let step_re = scale * aspect / (width as f64 - 1.0);
     let step_im = scale / (height as f64 - 1.0);
 
-    // ────────────────────────────────
-    // Tune this value!
-    // Aim for ~ 4–16 tasks per core → e.g. 32–256 chunks total
-    // For 1080p (~2000 rows) → chunk of ~8–32 rows
-    // For 4K → larger chunks ok
-    // Start with: height / (num_threads * 4)
-    // ────────────────────────────────
-    let rows_per_chunk = (height_usize / (num_threads * 16)).max(1);
-    let chunk_size_bytes = rows_per_chunk * bytes_per_row;
-
+    // Symmetry optimization
     if center_im.abs() < 1e-10 {
-        // Symmetry: compute upper half
-        let mid = height_usize / 2;
-        let upper_height = mid + 1;  // include mid
-        let upper_bytes = upper_height * bytes_per_row;
+        // Compute only upper half (y from 0 to mid inclusive)
+        let h = height as usize;
+        let mid = h / 2;  // last upper row index
 
-        let (upper_data, lower_data) = data.split_at_mut(upper_bytes);
+        // Parallel compute upper half (including middle row if height odd)
+        img.par_enumerate_pixels_mut()
+            .filter(|(_, y, _)| (*y as usize) <= mid)
+            .for_each(|(x, y, pixel)| {
+                let c_re = min_re + x as f64 * step_re;
+                let c_im = min_im + y as f64 * step_im;
+                let iter = mandelbrot_iter(c_re, c_im, max_iter);
+                *pixel = color_from_iter(iter, max_iter, colormap);
+            });
 
-        upper_data.par_chunks_mut(chunk_size_bytes).enumerate().for_each(|(chunk_idx, chunk)| {
-            let start_y = chunk_idx * rows_per_chunk;
-            let num_rows_in_chunk = chunk.len() / bytes_per_row;
+        // Mirror lower half by copying rows (raw buffer access)
+        let bytes_per_row = width as usize * 3;
+        let data: &mut [u8] = img.as_mut();
 
-            for local_y in 0..num_rows_in_chunk {
-                let y = start_y + local_y;
-                let row_start = local_y * bytes_per_row;
-                let row_slice = &mut chunk[row_start..row_start + bytes_per_row];
-
-                for x in 0..width_usize {
-                    let c_re = min_re + x as f64 * step_re;
-                    let c_im = min_im + y as f64 * step_im;
-                    let iter = mandelbrot_iter(c_re, c_im, max_iter);
-                    let [r, g, b] = color_from_iter(iter, max_iter, colormap);
-                    let px = x * 3;
-                    row_slice[px] = r;
-                    row_slice[px + 1] = g;
-                    row_slice[px + 2] = b;
-                }
-            }
-        });
-
-        // Mirror to lower half (sequential, as it's fast memcpy)
-        for y in (mid + 1)..height_usize {
-            let src_y = height_usize - 1 - y;
-            let dst_start = (y - upper_height) * bytes_per_row;
+        for y in (mid + 1)..h {
+            let src_y = h - 1 - y;
+            let dst_start = y * bytes_per_row;
             let src_start = src_y * bytes_per_row;
-            lower_data[dst_start..dst_start + bytes_per_row].copy_from_slice(&upper_data[src_start..src_start + bytes_per_row]);
+
+            // Split the mutable borrow into two non-overlapping mutable slices
+            let (left, right) = data.split_at_mut(dst_start);
+            let dst_slice = &mut right[0..bytes_per_row];
+
+            let src_slice = &left[src_start..src_start + bytes_per_row];  // immutable borrow from left part
+
+            dst_slice.copy_from_slice(src_slice);
         }
     } else {
-        // No symmetry: parallel over all chunks
-        data.par_chunks_mut(chunk_size_bytes).enumerate().for_each(|(chunk_idx, chunk)| {
-            let start_y = chunk_idx * rows_per_chunk;
-            let num_rows_in_chunk = chunk.len() / bytes_per_row;
-
-            for local_y in 0..num_rows_in_chunk {
-                let y = start_y + local_y;
-                let row_start = local_y * bytes_per_row;
-                let row_slice = &mut chunk[row_start..row_start + bytes_per_row];
-
-                for x in 0..width_usize {
-                    let c_re = min_re + x as f64 * step_re;
-                    let c_im = min_im + y as f64 * step_im;
-                    let iter = mandelbrot_iter(c_re, c_im, max_iter);
-                    let [r, g, b] = color_from_iter(iter, max_iter, colormap);
-                    let px = x * 3;
-                    row_slice[px] = r;
-                    row_slice[px + 1] = g;
-                    row_slice[px + 2] = b;
-                }
-            }
-        });
+        // No symmetry — full parallel fill
+        img.par_enumerate_pixels_mut()
+            .for_each(|(x, y, pixel)| {
+                let c_re = min_re + x as f64 * step_re;
+                let c_im = min_im + y as f64 * step_im;
+                let iter = mandelbrot_iter(c_re, c_im, max_iter);
+                *pixel = color_from_iter(iter, max_iter, colormap);
+            });
     }
 
-    data
+    img
 }
 
-fn color_from_iter(iter: u32, max_iter: u32, colormap_name: &str) -> [u8; 3] {
+fn color_from_iter(iter: u32, max_iter: u32, colormap_name: &str) -> Rgb<u8> {
     if iter == max_iter {
-        return [0, 0, 0];
+        return Rgb([0, 0, 0]);
     }
 
     let t = iter as f64 / max_iter as f64;
@@ -133,11 +97,11 @@ fn color_from_iter(iter: u32, max_iter: u32, colormap_name: &str) -> [u8; 3] {
                 _ => (c, 0.0, x),
             };
 
-            [
+            Rgb([
                 ((r + m) * 255.0).clamp(0.0, 255.0) as u8,
                 ((g + m) * 255.0).clamp(0.0, 255.0) as u8,
                 ((b + m) * 255.0).clamp(0.0, 255.0) as u8,
-            ]
+            ])
         }
         "hsvcycle" => {
             let hue = t * 360.0;            
@@ -161,24 +125,24 @@ fn color_from_iter(iter: u32, max_iter: u32, colormap_name: &str) -> [u8; 3] {
             let g = ((g_f + m) * 255.0).clamp(0.0, 255.0) as u8;
             let b = ((b_f + m) * 255.0).clamp(0.0, 255.0) as u8;
 
-            [r, g, b]
+            Rgb([r, g, b])
             
         }
         "grayscale" | "grey" => {
             let val = (t * 255.0).clamp(0.0, 255.0) as u8;
-            [val, val, val]
+            Rgb([val, val, val])
         }
         "fire" => {
             let r = (t * 255.0).clamp(0.0, 255.0) as u8;
             let g = (t.sqrt() * 255.0).clamp(0.0, 255.0) as u8;
             let b = (t * 64.0).clamp(0.0, 255.0) as u8;
-            [r, g, b]
+            Rgb([r, g, b])
         }
         "ocean" => {
             let r = (t * 40.0).clamp(0.0, 255.0) as u8;
             let g = (t * 180.0).clamp(0.0, 255.0) as u8;
             let b = (t * 255.0).clamp(0.0, 255.0) as u8;
-            [r, g, b]
+            Rgb([r, g, b])
         }
         "rainbow" => {
             let hue = (t * 360.0 + 120.0) % 360.0;  // Shifted cycle
@@ -198,40 +162,40 @@ fn color_from_iter(iter: u32, max_iter: u32, colormap_name: &str) -> [u8; 3] {
                 _ => (c, m, x),
             };
 
-            [
+            Rgb([
                 (r * 255.0).clamp(0.0, 255.0) as u8,
                 (g * 255.0).clamp(0.0, 255.0) as u8,
                 (b * 255.0).clamp(0.0, 255.0) as u8,
-            ]
+            ])
         }
         "viridis" => {
             // Approximate Viridis: blue-green-yellow
             let r = (1.0 - t).powi(3) * 255.0;
             let g = (1.0 - (1.0 - t).powi(2)) * 255.0;
             let b = t.sqrt() * 128.0;
-            [
+            Rgb([
                 r.clamp(0.0, 255.0) as u8,
                 g.clamp(0.0, 255.0) as u8,
                 b.clamp(0.0, 255.0) as u8,
-            ]
+            ])
         }
         "magma" => {
             // Black-red-orange-white
             let r = (t * 255.0 + 50.0).clamp(0.0, 255.0) as u8;
             let g = (t.powf(1.5) * 200.0).clamp(0.0, 255.0) as u8;
             let b = (t.powf(3.0) * 255.0).clamp(0.0, 255.0) as u8;
-            [r, g, b]
+            Rgb([r, g, b])
         }
         "plasma" => {
             // Blue-magenta-red-yellow
             let r = (0.5 + 0.5 * (t * 5.0 - 2.0).sin()) * 255.0;
             let g = (0.5 + 0.5 * (t * 5.0 - 1.0).sin()) * 255.0;
             let b = (0.5 + 0.5 * (t * 5.0).sin()) * 255.0;
-            [
+            Rgb([
                 r.clamp(0.0, 255.0) as u8,
                 g.clamp(0.0, 255.0) as u8,
                 b.clamp(0.0, 255.0) as u8,
-            ]
+            ])
         }
         &_ => {
             panic!("Unexpected invalid colormap name")

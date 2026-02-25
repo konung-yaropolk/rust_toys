@@ -1,6 +1,5 @@
 // mandel-zoom-frames/src/main.rs
 use clap::{Parser};
-use image::{ImageBuffer, RgbImage};
 use mandelbrot_lib::{generate_mandelbrot_frame};
 use rayon::ThreadPoolBuilder;
 use std::fs;
@@ -93,16 +92,16 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    // Set up global rayon thread pool once
+    // Set up rayon thread pool
     let num_threads = if args.threads == 0 {
         num_cpus::get().max(1)
     } else {
         args.threads
     };
-    ThreadPoolBuilder::new()
+    rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
         .build_global()
-        .unwrap_or_else(|e| eprintln!("Warning: Failed to set global thread pool: {}", e));
+        .unwrap_or_else(|e| eprintln!("Warning: Failed to set thread pool: {}", e));
 
     println!("Mandelbrot zoom sequence generator");
     println!("Config: {:?}", args);
@@ -126,7 +125,7 @@ fn main() {
             max_iter
         );
 
-        let data = generate_mandelbrot_frame(
+        let img = generate_mandelbrot_frame(
             args.center_re,
             args.center_im,
             current_zoom,
@@ -134,11 +133,7 @@ fn main() {
             &args.colormap,
             args.width,
             args.height,
-            args.threads,
         );
-
-        let img: RgbImage = ImageBuffer::from_vec(args.width, args.height, data)
-            .expect("Failed to create image buffer");
 
         if let Err(e) = img.save(&filename) {
             eprintln!("Failed to save {} : {}", filename, e);
