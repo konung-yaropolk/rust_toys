@@ -2,6 +2,7 @@
 members = [
     "mandelbrot-lib",
     "mandelbrot-framegen",
+    "mandelbrot-viewer",
 ]
 
 [profile.release]
